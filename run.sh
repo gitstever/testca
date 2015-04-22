@@ -1,4 +1,5 @@
 #!/bin/bash
+unset SSL_DIR
 dir=~/.testca
 nssdir=${dir}nss
 rm -rf ${dir}
