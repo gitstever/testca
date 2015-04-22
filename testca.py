@@ -201,8 +201,8 @@ class TestCA(object):
 			self.ca_cert = M2Crypto.X509.load_cert(dir + os.sep + 'Test_Intermediate_CA.pem')
 			self.ca_key = M2Crypto.RSA.load_key(dir + os.sep + 'Test_Intermediate_CA.key')
 			self.pkey = self.get_pkey(self.ca_key)
-					
-if __name__ == '__main__':
+
+def main():
 	ca = TestCA()
 	parser = argparse.ArgumentParser()
 	parser.add_argument('-a', '--add', help='Add Subject',nargs='*')
@@ -238,4 +238,8 @@ if __name__ == '__main__':
 			ca.revoke(issuer_cert, issuer_key, None)
 		for serial_number in args.revoke:
 			ca.revoke(issuer_cert, issuer_key, serial_number)
-	
+	return 0
+
+
+if __name__ == '__main__':
+	sys.exit(main())
