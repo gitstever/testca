@@ -2,6 +2,7 @@
 from __future__ import print_function
 import argparse
 import hacktestca
+import logging
 import M2Crypto.ASN1
 import M2Crypto.EVP
 import M2Crypto.m2
@@ -11,6 +12,10 @@ import OpenSSL.crypto
 import os
 import sys
 
+DNS='DNS'
+IP='IP'
+EMAIL='email'
+ALT_TYPES=[DNS,IP,EMAIL]
 class TestCA(object):
 
 	def m2crypto_x509_to_openssl_x509(self, cert):
@@ -115,7 +120,7 @@ class TestCA(object):
 		return num
 			
 
-	def sign_cert(self, req, pkey=None, issuer=None, days=365, digest='sha1',ca=False,pathlen=1):
+	def sign_cert(self, req, pkey=None, issuer=None, days=365, digest='sha1', ca=False, pathlen=1, extensions=[]):
 		if not pkey:
 			if self.pkey:
 				pkey = self.pkey
@@ -150,6 +155,8 @@ class TestCA(object):
 		#ext4 = hacktestca.new_extension('authorityKeyIdentifier', 'keyid,issuer:always', 0, issuer=issuer)
 		ext4 = hacktestca.new_extension('authorityKeyIdentifier', 'keyid', 0, issuer=issuer)
 		cert.add_ext(ext4)
+		for extension in extensions:
+			cert.add_ext(extension)
 		cert.sign(pkey, digest)
 		return cert
 
@@ -202,14 +209,70 @@ class TestCA(object):
 			self.ca_key = M2Crypto.RSA.load_key(dir + os.sep + 'Test_Intermediate_CA.key')
 			self.pkey = self.get_pkey(self.ca_key)
 
+	def save(self, key, key_pem, cert, p12_password='password'):
+		filename = self.get_filename_from_x509(cert)
+		cert_pem = cert.as_pem()
+		if not os.path.isfile(filename + '.pem'):
+			with open(filename + '.pem', 'w') as file:
+				file.write(cert.as_pem())
+			with open(filename + '.cer', 'w') as file:
+				file.write(cert.as_der())
+			with open(filename + '.key', 'w') as file:
+				file.write(key_pem)
+			with open(filename + '.txt', 'w') as file:
+				file.write(cert.as_text())
+		self.create_p12(cert, key, [self.ca_cert, self.root_ca_cert], p12_password)
+
+
+class AltNameHelper:
+
+	def __init__(self):
+		self.alt_names = []
+
+	def cleanup(self):
+		self.alt_names = []
+
+	def add(self, alt_type, value):
+		if alt_type in ALT_TYPES:
+			self.alt_names.append((alt_type, value))
+
+	def add_dns(self, dns):
+		self.add(DNS, dns)
+
+	def add_ip(self, ip):
+		self.add(IP, ip)
+
+	def add_email(self, email):
+		self.add(EMAIL, email)
+
+	def get_content(self):
+		content = ''
+		if self.alt_names:
+			for (alt_type, alt_name) in self.alt_names:
+				if content:
+					content += ', '
+				content += alt_type + ':' + alt_name
+		logging.debug(content)
+		return content
+
+	def get_m2crypto_extension(self):
+		extension = M2Crypto.X509.new_extension('subjectAltName', self.get_content())
+		return extension
+
 def main():
 	ca = TestCA()
 	parser = argparse.ArgumentParser()
-	parser.add_argument('-a', '--add', help='Add Subject',nargs='*')
+	parser.add_argument('-a', '--add', help='Add Subject', nargs='*')
+	parser.add_argument('--dns', help='DNS Address', nargs='*')
+	parser.add_argument('--ip', help='IP Address', nargs='*')
+	parser.add_argument('--email', help='E-mail Address', nargs='*')
 	parser.add_argument('-r', '--revoke', help='revoke certificate serial numbers listed, or update crl dates with no serial numbers',nargs='*')
 	parser.add_argument('--root', help='Use root ca rather than intermediate ca', action='store_true')
+	parser.add_argument('--debug', help='debug', action='store_true')
 	args = parser.parse_args()
-	print (args)
+	if args.debug:
+		logging.basicConfig(level=logging.DEBUG)
+	logging.debug(args)
 	if not args.add and args.revoke == None:
 		parser.print_help()
 	if args.root:
@@ -222,17 +285,23 @@ def main():
 		issuer_key = ca.ca_key
 	if args.add:
 		for cn in args.add:
+			extensions = []
 			dn = '/DC=com/DC=test/O=Org/OU=Org/OU=Org2/OU=People/CN=' + cn
 			(key, key_pem, pkey, req) = ca.make_csr(dn)
-			cert = ca.sign_cert(req, pkey = issuer_pkey, issuer=issuer_cert)
-			filename = ca.get_filename_from_x509(cert)
-			cert_pem = cert.as_pem()
-			if not os.path.isfile(filename + '.pem'):
-				with open(filename + '.pem', 'w') as file:
-					file.write(cert_pem)
-				with open(filename + '.key', 'w') as file:
-					file.write(key_pem)
-			ca.create_p12(cert, key, [ca.ca_cert, ca.root_ca_cert], 'password')
+			if args.dns or args.ip or args.email:
+				anh = AltNameHelper()
+				if args.dns:
+					for dns in args.dns:
+						anh.add_dns(dns)
+				if args.ip:
+					for ip in args.ip:
+						anh.add_ip(ip)
+				if args.email:
+					for email in args.email:
+						anh.add_email(email)
+				extensions.append(anh.get_m2crypto_extension())
+			cert = ca.sign_cert(req, pkey = issuer_pkey, issuer=issuer_cert, extensions=extensions)
+			ca.save(key, key_pem, cert)
 	if args.revoke != None:
 		if len(args.revoke) == 0:
 			ca.revoke(issuer_cert, issuer_key, None)

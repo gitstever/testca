@@ -120,3 +120,4 @@ ls -1 ${dir} | grep ^.\.pem$ | xargs -I {} openssl verify -crl_check -CApath ${d
 echo
 echo certutil -V -d ${nssdir} -n d -u C
 certutil -V -d ${nssdir} -n d -u C
+./altnametest.py
