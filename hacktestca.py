@@ -33,14 +33,11 @@ def new_extension(name, value, critical=0, issuer=None, _pyfree = 1):
         value.strip('0123456789abcdefABCDEF:') is not '':
         raise ValueError('value must be precomputed hash')
 
-
-    lhash = M2Crypto.m2.x509v3_lhash()
-    ctx = M2Crypto.m2.x509v3_set_conf_lhash(lhash)
+    ctx = M2Crypto.m2.x509v3_set_nconf()
     #ctx not zeroed
     fix_ctx(ctx, issuer)
 
-    x509_ext_ptr = M2Crypto.m2.x509v3_ext_conf(lhash, ctx, name, value)
-    #ctx,lhash freed
+    x509_ext_ptr = M2Crypto.m2.x509v3_ext_conf(None, ctx, name, value)
 
     if x509_ext_ptr is None:
         raise Exception
