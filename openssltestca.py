@@ -43,7 +43,7 @@ class TestCA(object):
 		pkey.assign_rsa(rsa_key)
 		return pkey
 
-	def make_csr(self, dn, bits=2048, digest='sha1',ca=False):
+	def make_csr(self, dn, bits=2048, digest='sha384',ca=False):
 		key = self.gen_rsa(bits)
 		key_pem = key.as_pem(cipher=None)
 		pkey = self.get_pkey(key)
@@ -65,7 +65,7 @@ class TestCA(object):
 		req.sign(pkey, digest)
 		return (key, key_pem, pkey, req)
 
-	def revoke(self, ca_cert, ca_key, serial_number, reason=b'unspecified'):
+	def revoke(self, ca_cert, ca_key, serial_number, reason=b'unspecified', digest='sha384'):
 		dummy_cert = OpenSSL.crypto.X509()
 		dummy_cert.gmtime_adj_notAfter(0)
 		not_after = dummy_cert.get_notAfter()
@@ -85,10 +85,9 @@ class TestCA(object):
 			crl.add_revoked(revoked)
 		openssl_ca_cert = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, ca_cert.as_pem())
 		openssl_key = OpenSSL.crypto.load_privatekey(OpenSSL.crypto.FILETYPE_PEM, ca_key.as_pem(cipher=None))
-		crl_pem = crl.export(openssl_ca_cert, openssl_key, OpenSSL.crypto.FILETYPE_PEM, days)
+		crl_pem = crl.export(openssl_ca_cert, openssl_key, OpenSSL.crypto.FILETYPE_PEM, days, digest=digest)
 		with open(filename, 'w') as file:
 			file.write(crl_pem)
-
 
 	def create_p12(self, cert, key, ca_certs, password):
 		p12 = OpenSSL.crypto.PKCS12()
@@ -115,7 +114,7 @@ class TestCA(object):
 		return num
 			
 
-	def sign_cert(self, req, pkey=None, issuer=None, days=365, digest='sha1',ca=False,pathlen=1):
+	def sign_cert(self, req, pkey=None, issuer=None, days=365, digest='sha384',ca=False,pathlen=1):
 		if not pkey:
 			if self.pkey:
 				pkey = self.pkey
@@ -209,7 +208,6 @@ if __name__ == '__main__':
 	parser.add_argument('-r', '--revoke', help='revoke certificate serial numbers listed, or update crl dates with no serial numbers',nargs='*')
 	parser.add_argument('--root', help='Use root ca rather than intermediate ca', action='store_true')
 	args = parser.parse_args()
-	print (args)
 	if not args.add and args.revoke == None:
 		parser.print_help()
 	if args.root:
@@ -238,4 +236,4 @@ if __name__ == '__main__':
 			ca.revoke(issuer_cert, issuer_key, None)
 		for serial_number in args.revoke:
 			ca.revoke(issuer_cert, issuer_key, serial_number)
-	
+
